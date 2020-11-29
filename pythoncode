@@ -1,0 +1,88 @@
+@author: cbolman@carthage.edu
+#==============     Imports     ================
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+#For model 
+from sklearn import svm
+from sklearn.model_selection import train_test_split
+
+#For normalizing
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
+
+#For accuracy calculation
+from sklearn.metrics import balanced_accuracy_score
+
+#For Feature selection
+from sklearn.model_selection import StratifiedKFold
+from sklearn.feature_selection import RFECV
+#==========================================
+#Importing and Defining Data from features (X) and classifiers (Y) from excel files into pandas 
+#dataframes (dfs). X2 and Y2 are our 500 testing trials.
+X = pd.read_excel (r'C:\Users\Admin\Desktop\Psych Thesis\Expertise-Features_V2.xlsx')
+X2 = pd.read_excel(r'C:\Users\Admin\Desktop\Psych Thesis\500X.xlsx')
+Y = pd.read_excel (r'C:\Users\Admin\Desktop\Psych Thesis\Expertise-Y_V2.xlsx')
+Y2 = pd.read_excel(r'C:\Users\Admin\Desktop\Psych Thesis\500Y.xlsx',)
+Y = np.ravel(Y)
+print ("Data imported...")
+
+# Normalizing Data (use either mmScaler OR sScaler)
+def mmScaler():
+    min_max = MinMaxScaler()
+    min_max.fit_transform(X)
+    print ("Features normalized using min_max scaler...")
+def sScaler():
+    scaler = StandardScaler()
+    scaler.fit(X)
+    print("Features normalized using standard scaler...")
+def GetCIs():
+    print("Balanced accuracy:",balAcc)
+    const = 1.96
+    err = 1 - balAcc
+    n = 500
+    highCI = const * np.sqrt(err*(1-err)/n)
+    lowCI = (0-const) * np.sqrt(err*(1-err)/n)
+    highlim = balAcc + highCI
+    lowlim = balAcc + lowCI
+    print(lowlim, highlim)
+
+mmScaler()
+
+#Splitting features (X) and classifications (Y) into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.30)
+#Defining the model and fitting the data to the training data
+svc = svm.SVC(kernel='linear', C=.001).fit(X_train, y_train)
+
+# Feature Selection using Recursive Feature Elimination with cross-validation
+rfecv = RFECV(estimator=svc, step=1, cv=StratifiedKFold(3),
+              scoring='accuracy')
+rfecv.fit(X, Y)
+print("Optimal number of features: %d" % rfecv.n_features_)
+
+
+# Plot number of features VS. cross-validation scores
+plt.figure()
+plt.xlabel("Number of features selected")
+plt.ylabel("Cross validation score (# of correct classifications)")
+plt.plot(range(1, len(rfecv.grid_scores_) + 1), rfecv.grid_scores_)
+plt.show()
+
+#Calculating the accuracy and balanced accuracy score by comparing the model’s predicted 
+#classification for the 500 trials in X2 to the known classifications in Y2
+print("Accuracy:",rfecv.score(X2,Y2))
+predicted = rfecv.predict(X2)
+balAcc = balanced_accuracy_score(Y2, predicted)
+print("Balanced accuracy:",balanced_accuracy_score(Y2, predicted))
+
+#Calculate 95% confidence intervals for balanced accuracy
+GetCIs()
+#Print the feature numbers eliminated by RFECV
+print(np.where(rfecv.support_ == False)[0])
+X.drop(X.columns[np.where(rfecv.support_ == False)[0]], axis=1, inplace=True)
+
+#Save feature coefficients for features selected by RFECV in pandas dataframe
+cf = pd.DataFrame(rfecv.estimator_.coef_)
+print(cf)
+cf.to_excel(r'C:\Users\Admin\Desktop\Psych Thesis\coefs.xlsx')
